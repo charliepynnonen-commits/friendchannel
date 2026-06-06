@@ -13,7 +13,9 @@ function isInstalled() {
 function download(url, onLine) {
   return new Promise((resolve, reject) => {
     const proc = spawn('yt-dlp', [
-      '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+      // Prefer H264 720p + M4A — matches our normalize fast-path so video copy is used.
+      // Falls back to any 720p, then anything available.
+      '--format', 'bestvideo[vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio[ext=m4a]/best[height<=720]/best',
       '--merge-output-format', 'mp4',
       '--output', `${config.mediaDir}/%(title)s.%(ext)s`,
       '--restrict-filenames',
