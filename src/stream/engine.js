@@ -32,9 +32,7 @@ function buildArgs() {
     '-b:a', '128k',
     '-ac', '2',
     '-ar', '44100',
-    // Absorb audio timestamp drift at file/loop boundaries
-    '-af', 'aresample=async=1',
-    // Handle negative timestamps at loop boundaries
+    // Handle negative timestamps at loop/file boundaries
     '-avoid_negative_ts', 'make_zero',
     '-f', 'hls',
     '-hls_time', '4',
@@ -58,15 +56,19 @@ function _spawn() {
   if (!running || spawning || proc) return;
   spawning = true;
   console.log('[stream] Starting FFmpeg...');
-  proc = spawn('ffmpeg', buildArgs(), { stdio: ['ignore', 'ignore', 'pipe'] });
+  // Capture in local var so the exit handler can check if it's still the active process.
+  // Without this, stop() sets proc=null immediately, then the old process's async exit
+  // handler fires later and nulls out the *new* process reference — allowing a second
+  // concurrent spawn and corrupting the HLS manifest.
+  const thisProc = spawn('ffmpeg', buildArgs(), { stdio: ['ignore', 'ignore', 'pipe'] });
+  proc = thisProc;
   spawning = false;
 
-  proc.stderr.on('data', (data) => {
+  thisProc.stderr.on('data', (data) => {
     const msg = data.toString();
     if (msg.includes('Error') || msg.includes('Invalid') || msg.includes('No such file') || msg.includes('Impossible')) {
       process.stderr.write('[ffmpeg:error] ' + msg);
     }
-    // Show which file FFmpeg is opening (needs -loglevel verbose to appear)
     if (msg.includes("Opening '") && msg.includes("for reading")) {
       const match = msg.match(/Opening '([^']+)'/);
       if (match) console.log('[ffmpeg] opening:', match[1].split('/').pop());
@@ -84,7 +86,9 @@ function _spawn() {
     console.log(`[seg] ${filename}  gap=${gap}s`);
   });
 
-  proc.on('exit', (code, signal) => {
+  thisProc.on('exit', (code, signal) => {
+    // Ignore if a newer process has already taken over
+    if (proc !== thisProc) return;
     proc = null;
     if (!running) return;
     if (signal === 'SIGTERM' || signal === 'SIGKILL') return;
@@ -99,6 +103,8 @@ function stop() {
   clearTimeout(restartTimer);
   if (proc) {
     proc.kill('SIGTERM');
+    // Set proc=null AFTER kill so the exit handler sees proc!==thisProc and ignores it,
+    // rather than nulling out whatever proc points to at exit time.
     proc = null;
   }
   if (segWatcher) {
