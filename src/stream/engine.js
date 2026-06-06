@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const config = require('../config');
@@ -12,42 +12,40 @@ let lastSegTime = null;
 
 function buildArgs() {
   return [
-    // -re reads input at real-time rate — gives live "TV clock" so all viewers
-    // see the same content at the same wall-clock time
+    // -re reads at real-time rate — all viewers see the same content at the same wall-clock time.
+    // loop.mp4 is a single pre-rendered file (no file boundaries), so -re is perfectly stable.
     '-re',
-    '-f', 'concat',
-    '-safe', '0',
     '-stream_loop', '-1',
-    '-i', config.playlistPath,
-    // Normalize all input to 720p 16:9 with letterboxing
-    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black',
-    '-r', '25',
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '23',
-    // Keyframe every 2s for consistent HLS segment boundaries
-    '-g', '50',
-    '-sc_threshold', '0',
-    '-c:a', 'aac',
-    '-b:a', '128k',
-    '-ac', '2',
-    '-ar', '44100',
-    // Handle negative timestamps at loop/file boundaries
+    '-i', config.loopPath,
+    // loop.mp4 is already 720p H264 + AAC from the normalize step — just copy.
+    '-c', 'copy',
     '-avoid_negative_ts', 'make_zero',
     '-f', 'hls',
-    '-hls_time', '4',
-    '-hls_list_size', '10',
-    // delete_segments keeps disk clean; append_list gives live-stream behavior
-    // delete_threshold keeps 3 extra segments as safety buffer during file transitions
+    '-hls_time', '2',
+    '-hls_list_size', '15',
     '-hls_flags', 'delete_segments+append_list',
-    '-hls_delete_threshold', '3',
+    '-hls_delete_threshold', '5',
     '-hls_segment_filename', path.join(config.hlsDir, 'seg_%05d.ts'),
     path.join(config.hlsDir, 'index.m3u8'),
   ];
 }
 
+function killOrphans() {
+  try {
+    execSync(`pkill -KILL -f "${config.loopPath}"`, { stdio: 'ignore' });
+    console.log('[stream] Killed orphaned FFmpeg process(es)');
+  } catch {
+    // pkill exits 1 when nothing matched — that's fine
+  }
+}
+
 function start() {
   if (proc) return;
+  if (!fs.existsSync(config.loopPath)) {
+    console.warn('[stream] loop.mp4 not found — run prerender first');
+    return;
+  }
+  killOrphans();
   running = true;
   _spawn();
 }
@@ -55,14 +53,10 @@ function start() {
 function _spawn() {
   if (!running || spawning || proc) return;
   spawning = true;
-  console.log('[stream] Starting FFmpeg...');
-  // Capture in local var so the exit handler can check if it's still the active process.
-  // Without this, stop() sets proc=null immediately, then the old process's async exit
-  // handler fires later and nulls out the *new* process reference — allowing a second
-  // concurrent spawn and corrupting the HLS manifest.
   const thisProc = spawn('ffmpeg', buildArgs(), { stdio: ['ignore', 'ignore', 'pipe'] });
   proc = thisProc;
   spawning = false;
+  console.log(`[stream] FFmpeg started (PID: ${thisProc.pid})`);
 
   thisProc.stderr.on('data', (data) => {
     const msg = data.toString();
@@ -80,6 +74,9 @@ function _spawn() {
   lastSegTime = Date.now();
   segWatcher = fs.watch(config.hlsDir, (event, filename) => {
     if (!filename || !filename.endsWith('.ts')) return;
+    // Skip deletion events — fs.watch fires for both creates and deletes.
+    // Only count a segment if the file actually exists right now.
+    if (!fs.existsSync(path.join(config.hlsDir, filename))) return;
     const now = Date.now();
     const gap = lastSegTime ? ((now - lastSegTime) / 1000).toFixed(1) : '?';
     lastSegTime = now;
@@ -102,9 +99,7 @@ function stop() {
   running = false;
   clearTimeout(restartTimer);
   if (proc) {
-    proc.kill('SIGTERM');
-    // Set proc=null AFTER kill so the exit handler sees proc!==thisProc and ignores it,
-    // rather than nulling out whatever proc points to at exit time.
+    proc.kill('SIGTERM'); // graceful — allows FFmpeg to finalize the current segment
     proc = null;
   }
   if (segWatcher) {
@@ -115,7 +110,15 @@ function stop() {
 
 function restart() {
   console.log('[stream] Restarting FFmpeg...');
-  stop();
+  clearTimeout(restartTimer);
+  if (proc) {
+    proc.kill('SIGKILL'); // immediate — no overlap window with the new process
+    proc = null;
+  }
+  if (segWatcher) {
+    segWatcher.close();
+    segWatcher = null;
+  }
   running = true;
   _spawn();
 }

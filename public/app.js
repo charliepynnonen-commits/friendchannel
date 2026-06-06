@@ -76,15 +76,14 @@ function openPlayer(url, name, iconURL) {
 
   if (Hls.isSupported()) {
     hls = new Hls({
-      liveSyncDurationCount: 4,
-      liveMaxLatencyDurationCount: 10,
+      liveSyncDurationCount: 3,
+      liveMaxLatencyDurationCount: 8,
       enableWorker: true,
-      maxBufferLength: 40,
-      backBufferLength: 30,
-      // Generous timeouts — segments can be delayed during file transitions
-      manifestLoadingTimeOut: 15000,
-      levelLoadingTimeOut: 15000,
-      fragLoadingTimeOut: 20000,
+      maxBufferLength: 20,
+      backBufferLength: 10,
+      manifestLoadingTimeOut: 10000,
+      levelLoadingTimeOut: 10000,
+      fragLoadingTimeOut: 15000,
       manifestLoadingMaxRetry: 6,
       levelLoadingMaxRetry: 6,
       fragLoadingMaxRetry: 6,

@@ -23,5 +23,6 @@ module.exports = {
   hlsDir: path.join(DATA_DIR, 'hls'),
   channelDir: path.join(DATA_DIR, 'channel'),
   playlistPath: path.join(DATA_DIR, 'playlist.ffconcat'),
+  loopPath: path.join(DATA_DIR, 'loop.mp4'),
   libraryPath: path.join(DATA_DIR, 'library.json'),
 };

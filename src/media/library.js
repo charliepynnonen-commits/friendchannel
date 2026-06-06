@@ -3,6 +3,7 @@ const fsSync = require('fs');
 const path = require('path');
 const { randomUUID } = require('crypto');
 const { probe } = require('../stream/probe');
+const { normalize } = require('./normalize');
 const config = require('../config');
 
 let library = { files: [] };
@@ -37,7 +38,14 @@ async function add(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (!ALLOWED_EXTENSIONS.has(ext)) return null;
 
-  console.log(`[library] Probing ${path.basename(filePath)}...`);
+  console.log(`[library] Normalizing ${path.basename(filePath)}...`);
+  try {
+    await normalize(filePath);
+  } catch (err) {
+    console.error(`[library] Normalize failed for ${path.basename(filePath)}:`, err.message);
+    return null;
+  }
+
   try {
     const info = await probe(filePath);
     const entry = {
@@ -66,7 +74,9 @@ async function remove(filePath) {
   if (library.files.length !== before) {
     await _save();
     console.log(`[library] Removed: ${path.basename(filePath)}`);
+    return true;
   }
+  return false;
 }
 
 function getReadyFiles() {

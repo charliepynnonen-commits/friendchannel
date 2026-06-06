@@ -1,6 +1,6 @@
 const chokidar = require('chokidar');
 const library = require('./library');
-const playlist = require('../stream/playlist');
+const prerender = require('../stream/prerender');
 const engine = require('../stream/engine');
 const config = require('../config');
 
@@ -8,18 +8,37 @@ function start() {
   const watcher = chokidar.watch(config.mediaDir, {
     persistent: true,
     ignoreInitial: false,
-    // Wait for file to finish writing before processing
+    ignored: /(^|[/\\])\../, // ignore dot files (.DS_Store, .fc_tmp_*, etc.)
     awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 500 },
   });
 
+  // Track in-flight normalizations. The update only runs when ALL pending
+  // normalizes are done — otherwise a fast file triggers a rebuild before slow
+  // files finish, and the loop is built with an incomplete library.
+  let activeNormals = 0;
+  let pendingUpdate = false;
+
+  function maybeUpdate() {
+    if (activeNormals > 0) return;
+    if (!pendingUpdate) return;
+    pendingUpdate = false;
+    _updateStream();
+  }
+
   watcher.on('add', async (filePath) => {
+    activeNormals++;
     const added = await library.add(filePath);
-    if (added) await _updateStream();
+    activeNormals--;
+    if (added) pendingUpdate = true;
+    maybeUpdate();
   });
 
   watcher.on('unlink', async (filePath) => {
-    await library.remove(filePath);
-    await _updateStream();
+    const removed = await library.remove(filePath);
+    if (removed) {
+      pendingUpdate = true;
+      maybeUpdate();
+    }
   });
 
   console.log(`[watcher] Watching ${config.mediaDir}`);
@@ -31,13 +50,11 @@ async function _updateStream() {
     engine.stop();
     return;
   }
-  await playlist.build(files);
-  if (!engine.isRunning()) {
-    engine.start();
-  } else {
-    // Concat demuxer caches the file list at startup — must restart to pick up changes
-    engine.restart();
-  }
+  // Stop the stream, rebuild loop.mp4, then start fresh.
+  // The rebuild is fast (~10s) since files are already normalized to H264 + AAC.
+  engine.stop();
+  await prerender.build(files);
+  engine.start();
 }
 
 module.exports = { start };
