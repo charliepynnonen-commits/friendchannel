@@ -136,4 +136,68 @@ function escapeAttr(str) {
   return str.replace(/"/g, '&quot;');
 }
 
+// ── YouTube downloader ──────────────────────────
+
+const ytBtn    = document.getElementById('yt-btn');
+const ytInput  = document.getElementById('yt-url');
+const ytStatus = document.getElementById('yt-status');
+
+function setStatus(msg, cls) {
+  ytStatus.textContent = msg;
+  ytStatus.className = 'download-status ' + (cls || '');
+}
+
+ytBtn.addEventListener('click', startDownload);
+ytInput.addEventListener('keydown', e => { if (e.key === 'Enter') startDownload(); });
+
+async function startDownload() {
+  const url = ytInput.value.trim();
+  if (!url) return;
+
+  ytBtn.disabled = true;
+  ytBtn.textContent = 'Downloading...';
+  setStatus('Starting...', '');
+
+  try {
+    const res = await fetch('/api/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      setStatus(err.error, 'error');
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = JSON.parse(line.slice(6));
+        if (data.progress) setStatus(data.progress, '');
+        if (data.done) {
+          setStatus('Done — normalizing and rebuilding stream in background', 'done');
+          ytInput.value = '';
+        }
+        if (data.error) setStatus(data.error, 'error');
+      }
+    }
+  } catch (err) {
+    setStatus(err.message, 'error');
+  } finally {
+    ytBtn.disabled = false;
+    ytBtn.textContent = 'Download';
+  }
+}
+
 init();

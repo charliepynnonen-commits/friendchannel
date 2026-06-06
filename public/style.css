@@ -281,3 +281,69 @@ main {
 .channel-bug.hidden {
   display: none;
 }
+
+/* ── Download section ────────────────────────── */
+
+.download-row {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.download-row input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+  padding: 0.55rem 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+}
+
+.download-row input:focus {
+  border-color: var(--border-hover);
+}
+
+.download-row input::placeholder {
+  color: var(--text-muted);
+}
+
+.download-row button {
+  background: var(--border-hover);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.55rem 1.2rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+  font-family: inherit;
+}
+
+.download-row button:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.download-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.download-status {
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.download-status.hidden { display: none; }
+.download-status.error  { color: var(--red); }
+.download-status.done   { color: var(--live); }
