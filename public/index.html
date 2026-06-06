@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FriendChannel</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+  <div id="crt-overlay"></div>
+  <header>
+    <div class="header-left">
+      <span class="logo">&#9641;</span>
+      <h1>FriendChannel</h1>
+    </div>
+    <div id="self-info" class="self-info"></div>
+  </header>
+
+  <div id="player-wrap" class="hidden">
+    <div id="player-bar">
+      <span id="player-channel-name"></span>
+      <button id="player-close" title="Close (Esc)">&#10005;</button>
+    </div>
+    <video id="player" controls autoplay playsinline></video>
+    <img id="channel-bug" class="channel-bug hidden" alt="">
+  </div>
+
+  <main>
+    <div class="section-title">Channels</div>
+    <div id="channels-grid"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

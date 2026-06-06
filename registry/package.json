@@ -1,0 +1,12 @@
+{
+  "name": "friendchannel-registry",
+  "version": "0.1.0",
+  "description": "Central channel discovery registry for FriendChannel",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.0"
+  }
+}

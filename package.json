@@ -1,0 +1,14 @@
+{
+  "name": "friendchannel",
+  "version": "0.1.0",
+  "description": "Peer-to-peer 24/7 streaming TV network for friends",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0"
+  }
+}

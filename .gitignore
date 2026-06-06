@@ -1,0 +1,18 @@
+node_modules/
+registry/node_modules/
+
+# Environment — contains personal config and IPs
+.env
+
+# Generated at runtime
+data/hls/
+data/library.json
+data/playlist.ffconcat
+
+# Personal content — each person provides their own
+data/media/
+data/channel/
+
+# macOS
+.DS_Store
+**/.DS_Store
