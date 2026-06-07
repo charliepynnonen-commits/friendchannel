@@ -1,6 +1,6 @@
 const chokidar = require('chokidar');
 const library = require('./library');
-const prerender = require('../stream/prerender');
+const playlist = require('../stream/playlist');
 const engine = require('../stream/engine');
 const config = require('../config');
 
@@ -13,8 +13,8 @@ function start() {
   });
 
   // Track in-flight normalizations. The update only runs when ALL pending
-  // normalizes are done — otherwise a fast file triggers a rebuild before slow
-  // files finish, and the loop is built with an incomplete library.
+  // normalizes are done — otherwise a fast file triggers a rebuild before
+  // slower files finish.
   let activeNormals = 0;
   let pendingUpdate = false;
 
@@ -45,16 +45,17 @@ function start() {
 }
 
 async function _updateStream() {
-  const files = library.getReadyFiles();
-  if (files.length === 0) {
+  const entries = library.getReadyEntries();
+  if (entries.length === 0) {
     engine.stop();
     return;
   }
-  // Stop the stream, rebuild loop.mp4, then start fresh.
-  // The rebuild is fast (~10s) since files are already normalized to H264 + AAC.
-  engine.stop();
-  await prerender.build(files);
-  engine.start();
+  await playlist.build(entries);
+  if (!engine.isRunning()) {
+    engine.start();
+  } else {
+    engine.restart();
+  }
 }
 
 module.exports = { start };

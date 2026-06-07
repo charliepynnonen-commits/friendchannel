@@ -3,7 +3,7 @@ const express = require('express');
 const fs = require('fs/promises');
 const config = require('./src/config');
 const library = require('./src/media/library');
-const prerender = require('./src/stream/prerender');
+const playlist = require('./src/stream/playlist');
 const engine = require('./src/stream/engine');
 const watcher = require('./src/media/watcher');
 const registry = require('./src/api/registry');
@@ -16,9 +16,9 @@ async function main() {
 
   await library.load();
 
-  const files = library.getReadyFiles();
-  if (files.length > 0) {
-    await prerender.build(files);
+  const entries = library.getReadyEntries();
+  if (entries.length > 0) {
+    await playlist.build(entries);
     engine.start();
   } else {
     console.log('[server] No media yet — drop video files into data/media/ to begin streaming.');

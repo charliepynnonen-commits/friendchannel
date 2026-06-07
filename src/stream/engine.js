@@ -12,13 +12,17 @@ let lastSegTime = null;
 
 function buildArgs() {
   return [
-    // -re reads at real-time rate — all viewers see the same content at the same wall-clock time.
-    // loop.mp4 is a single pre-rendered file (no file boundaries), so -re is perfectly stable.
+    // -re reads input at real-time rate — gives live "TV clock" so all viewers
+    // see the same content at the same wall-clock time.
+    // ffconcat with explicit duration lines prevents timestamp offset stalls.
     '-re',
-    '-stream_loop', '-1',
-    '-i', config.loopPath,
-    // loop.mp4 is already 720p H264 + AAC from the normalize step — just copy.
-    '-c', 'copy',
+    '-f', 'concat', '-safe', '0', '-stream_loop', '-1',
+    '-i', config.playlistPath,
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black',
+    '-r', '25',
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+    '-g', '50', '-sc_threshold', '0',
+    '-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-ar', '44100',
     '-avoid_negative_ts', 'make_zero',
     '-f', 'hls',
     '-hls_time', '2',
@@ -32,7 +36,7 @@ function buildArgs() {
 
 function killOrphans() {
   try {
-    execSync(`pkill -KILL -f "${config.loopPath}"`, { stdio: 'ignore' });
+    execSync(`pkill -KILL -f "${config.playlistPath}"`, { stdio: 'ignore' });
     console.log('[stream] Killed orphaned FFmpeg process(es)');
   } catch {
     // pkill exits 1 when nothing matched — that's fine
@@ -41,8 +45,8 @@ function killOrphans() {
 
 function start() {
   if (proc) return;
-  if (!fs.existsSync(config.loopPath)) {
-    console.warn('[stream] loop.mp4 not found — run prerender first');
+  if (!fs.existsSync(config.playlistPath)) {
+    console.warn('[stream] playlist.ffconcat not found — cannot start');
     return;
   }
   killOrphans();
@@ -69,13 +73,10 @@ function _spawn() {
     }
   });
 
-  // Watch HLS dir for new segments — gaps here mean FFmpeg is stalling, not hls.js
   if (segWatcher) segWatcher.close();
   lastSegTime = Date.now();
   segWatcher = fs.watch(config.hlsDir, (event, filename) => {
     if (!filename || !filename.endsWith('.ts')) return;
-    // Skip deletion events — fs.watch fires for both creates and deletes.
-    // Only count a segment if the file actually exists right now.
     if (!fs.existsSync(path.join(config.hlsDir, filename))) return;
     const now = Date.now();
     const gap = lastSegTime ? ((now - lastSegTime) / 1000).toFixed(1) : '?';
@@ -84,7 +85,6 @@ function _spawn() {
   });
 
   thisProc.on('exit', (code, signal) => {
-    // Ignore if a newer process has already taken over
     if (proc !== thisProc) return;
     proc = null;
     if (!running) return;
@@ -99,7 +99,7 @@ function stop() {
   running = false;
   clearTimeout(restartTimer);
   if (proc) {
-    proc.kill('SIGTERM'); // graceful — allows FFmpeg to finalize the current segment
+    proc.kill('SIGTERM');
     proc = null;
   }
   if (segWatcher) {
@@ -112,7 +112,7 @@ function restart() {
   console.log('[stream] Restarting FFmpeg...');
   clearTimeout(restartTimer);
   if (proc) {
-    proc.kill('SIGKILL'); // immediate — no overlap window with the new process
+    proc.kill('SIGKILL');
     proc = null;
   }
   if (segWatcher) {

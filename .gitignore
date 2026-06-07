@@ -8,7 +8,6 @@ registry/node_modules/
 data/hls/
 data/library.json
 data/playlist.ffconcat
-data/loop.mp4
 data/.yt_tmp/
 
 # Personal content — each person provides their own

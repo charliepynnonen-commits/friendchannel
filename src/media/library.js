@@ -83,8 +83,14 @@ function getReadyFiles() {
   return library.files.filter(f => f.status === 'ready').map(f => f.path);
 }
 
+function getReadyEntries() {
+  return library.files
+    .filter(f => f.status === 'ready')
+    .map(f => ({ path: f.path, duration: f.duration }));
+}
+
 function list() {
   return library.files;
 }
 
-module.exports = { load, add, remove, getReadyFiles, list };
+module.exports = { load, add, remove, getReadyFiles, getReadyEntries, list };
