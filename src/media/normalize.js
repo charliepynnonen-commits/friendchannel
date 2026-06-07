@@ -1,28 +1,45 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs/promises');
+const fsSync = require('fs');
+
+const VAAPI_DEVICE = '/dev/dri/renderD128';
+
+function useVaapi() {
+  return process.platform === 'linux' && fsSync.existsSync(VAAPI_DEVICE);
+}
 
 async function normalize(filePath) {
   const dir = path.dirname(filePath);
   const base = path.basename(filePath);
   const tmpPath = path.join(dir, `.fc_tmp_${base}`);
+  const vaapi = useVaapi();
+
+  console.log(`[normalize] ${path.basename(filePath)} — ${vaapi ? 'VAAPI hardware' : 'libx264 software'} encode`);
+
+  const args = vaapi ? [
+    '-vaapi_device', VAAPI_DEVICE,
+    '-i', filePath,
+    // Scale/pad on CPU, convert to NV12, upload to GPU for encoding
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,format=nv12,hwupload',
+    '-r', '25',
+    '-c:v', 'h264_vaapi', '-qp', '23', '-g', '50',
+    '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2',
+    '-movflags', '+faststart',
+    '-y', tmpPath,
+  ] : [
+    '-i', filePath,
+    '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black',
+    '-r', '25',
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+    '-g', '50', '-sc_threshold', '0',
+    '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2',
+    '-movflags', '+faststart',
+    '-y', tmpPath,
+  ];
 
   await new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', [
-      '-i', filePath,
-      // Always fully transcode to 720p H264 25fps with clean timestamps.
-      // Skipping video re-encode (copy) preserves original timestamps which
-      // can cause the concat demuxer to miscalculate offsets and stall.
-      '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black',
-      '-r', '25',
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
-      '-g', '50', '-sc_threshold', '0',
-      '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2',
-      '-movflags', '+faststart',
-      '-y',
-      tmpPath,
-    ], { stdio: ['ignore', 'ignore', 'pipe'] });
-
+    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let lastErr = '';
     proc.stderr.on('data', d => { lastErr = d.toString(); });
     proc.on('exit', (code) => {

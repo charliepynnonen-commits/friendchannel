@@ -57,6 +57,7 @@ else
   read -rp "Press Enter once you've run 'tailscale up' and are connected..."
 fi
 
+CURRENT_USER=$(whoami)
 TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || echo "")
 if [ -z "$TAILSCALE_IP" ]; then
   echo -e "${YELLOW}[warn]${NC} Could not detect Tailscale IP — are you connected to your tailnet?"
@@ -82,6 +83,13 @@ EOF
   echo -e "${GREEN}[ok]${NC} .env created"
 fi
 
+# ── VAAPI access (Intel hardware encoding) ────────
+if [ -e /dev/dri/renderD128 ]; then
+  sudo usermod -aG render,video "$CURRENT_USER" 2>/dev/null || true
+  echo -e "${GREEN}[ok]${NC} Added $CURRENT_USER to render/video groups for VAAPI"
+  echo -e "${YELLOW}[note]${NC} Log out and back in (or reboot) for group changes to take effect"
+fi
+
 # ── Directories & packages ────────────────────────
 mkdir -p "$SCRIPT_DIR/data/media" "$SCRIPT_DIR/data/channel"
 echo -e "${GREEN}[ok]${NC} data/ directories ready"
@@ -101,7 +109,6 @@ if [[ "$INSTALL_SVC" =~ ^[Nn]$ ]]; then
 fi
 
 NODE_BIN=$(which node)
-CURRENT_USER=$(whoami)
 SERVICE_FILE=/etc/systemd/system/friendchannel.service
 
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
