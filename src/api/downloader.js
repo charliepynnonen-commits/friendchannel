@@ -1,5 +1,12 @@
 const { spawn, execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const config = require('../config');
+
+// Temp dir for yt-dlp intermediate files (f136, f140, .part, etc.).
+// Lives outside data/media/ so the watcher never sees partial files —
+// only the final merged MP4 moves into the watched directory.
+const ytTmpDir = path.join(config.dataDir, '.yt_tmp');
 
 function isInstalled() {
   try {
@@ -11,13 +18,17 @@ function isInstalled() {
 }
 
 function download(url, onLine) {
+  fs.mkdirSync(ytTmpDir, { recursive: true });
+
   return new Promise((resolve, reject) => {
     const proc = spawn('yt-dlp', [
       // Prefer H264 720p + M4A — matches our normalize fast-path so video copy is used.
-      // Falls back to any 720p, then anything available.
       '--format', 'bestvideo[vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio[ext=m4a]/best[height<=720]/best',
       '--merge-output-format', 'mp4',
-      '--output', `${config.mediaDir}/%(title)s.%(ext)s`,
+      // Final file lands in media dir; all intermediates (f136, f140, .part) stay in tmp
+      '--paths', `home:${config.mediaDir}`,
+      '--paths', `temp:${ytTmpDir}`,
+      '--output', '%(title)s.%(ext)s',
       '--restrict-filenames',
       '--no-playlist',
       '--newline',
