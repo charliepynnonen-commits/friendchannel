@@ -57,6 +57,31 @@ router.get('/api/channels', async (req, res) => {
   res.json([self, ...others]);
 });
 
+router.get('/playlist.m3u', async (req, res) => {
+  const remote = await registry.getChannels();
+  const self = {
+    id: registry.nodeId,
+    name: config.name,
+    tailscaleIP: config.tailscaleIP,
+    port: config.port,
+    streaming: engine.isRunning(),
+    iconURL: findIconURL(),
+  };
+  const all = [self, ...remote.filter(c => c.id !== registry.nodeId)];
+  const online = all.filter(c => c.streaming);
+
+  const lines = ['#EXTM3U'];
+  for (const ch of online) {
+    const logo = ch.iconURL ? ` tvg-logo="${ch.iconURL}"` : '';
+    lines.push(`#EXTINF:-1${logo},${ch.name}`);
+    lines.push(`http://${ch.tailscaleIP}:${ch.port}/stream/index.m3u8`);
+  }
+
+  res.setHeader('Content-Type', 'application/x-mpegurl');
+  res.setHeader('Content-Disposition', 'inline; filename="friendchannel.m3u"');
+  res.send(lines.join('\n') + '\n');
+});
+
 router.post('/api/download', (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'url required' });
