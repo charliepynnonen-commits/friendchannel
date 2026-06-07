@@ -26,7 +26,7 @@ async function _post(path, body) {
   });
 }
 
-async function register() {
+async function register(streaming) {
   if (!config.registryURL) return;
   try {
     await _post('/register', {
@@ -34,6 +34,7 @@ async function register() {
       name: config.name,
       tailscaleIP: config.tailscaleIP,
       port: config.port,
+      streaming: !!streaming,
       iconURL: findIconURL(),
     });
   } catch (err) {
@@ -64,8 +65,10 @@ async function getChannels() {
 }
 
 function start() {
-  register();
-  intervalId = setInterval(register, 60_000);
+  const engine = require('../stream/engine');
+  const beat = () => register(engine.isRunning());
+  beat();
+  intervalId = setInterval(beat, 60_000);
 }
 
 function stop() {
