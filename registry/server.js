@@ -9,9 +9,9 @@ const channels = new Map();
 const EXPIRY_MS = 90_000;
 
 app.post('/register', (req, res) => {
-  const { id, name, tailscaleIP, port } = req.body;
+  const { id, name, tailscaleIP, port, streaming, iconURL } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'id and name required' });
-  channels.set(id, { id, name, tailscaleIP, port, lastSeen: Date.now() });
+  channels.set(id, { id, name, tailscaleIP, port, streaming: !!streaming, iconURL: iconURL || null, lastSeen: Date.now() });
   res.json({ ok: true });
 });
 

@@ -22,23 +22,29 @@ async function _post(path, body) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(5000),
+    signal: AbortSignal.timeout(10_000),
   });
 }
 
 async function register(streaming) {
   if (!config.registryURL) return;
-  try {
-    await _post('/register', {
-      id: nodeId,
-      name: config.name,
-      tailscaleIP: config.tailscaleIP,
-      port: config.port,
-      streaming: !!streaming,
-      iconURL: findIconURL(),
-    });
-  } catch (err) {
-    console.warn('[registry] Heartbeat failed:', err.message);
+  const body = {
+    id: nodeId,
+    name: config.name,
+    tailscaleIP: config.tailscaleIP,
+    port: config.port,
+    streaming: !!streaming,
+    iconURL: findIconURL(),
+  };
+  // Two attempts — first may time out waking the Fly.io machine from sleep
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await _post('/register', body);
+      return;
+    } catch (err) {
+      if (attempt === 2) console.warn('[registry] Heartbeat failed:', err.message);
+      else await new Promise(r => setTimeout(r, 3000));
+    }
   }
 }
 
