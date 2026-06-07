@@ -38,8 +38,8 @@ async function normalize(filePath) {
     '-y', tmpPath,
   ];
 
-  await new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  const run = (a) => new Promise((resolve, reject) => {
+    const proc = spawn('ffmpeg', a, { stdio: ['ignore', 'ignore', 'pipe'] });
     let lastErr = '';
     proc.stderr.on('data', d => { lastErr = d.toString(); });
     proc.on('exit', (code) => {
@@ -47,6 +47,27 @@ async function normalize(filePath) {
       else reject(new Error(`ffmpeg exited ${code}: ${lastErr.trim().slice(-120)}`));
     });
   });
+
+  try {
+    await run(args);
+  } catch (err) {
+    if (vaapi) {
+      console.warn(`[normalize] VAAPI failed (${err.message.slice(0, 60)}), retrying with libx264`);
+      const softArgs = [
+        '-i', filePath,
+        '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black',
+        '-r', '25',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+        '-g', '50', '-sc_threshold', '0',
+        '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2',
+        '-movflags', '+faststart',
+        '-y', tmpPath,
+      ];
+      await run(softArgs);
+    } else {
+      throw err;
+    }
+  }
 
   await fs.rename(tmpPath, filePath);
 }
