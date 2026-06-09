@@ -1,39 +1,52 @@
 require('dotenv').config();
 const express = require('express');
 const fs = require('fs/promises');
+const path = require('path');
 const config = require('./src/config');
-const library = require('./src/media/library');
-const playlist = require('./src/stream/playlist');
-const engine = require('./src/stream/engine');
-const watcher = require('./src/media/watcher');
+const Channel = require('./src/channel');
+const channels = require('./src/channels');
 const registry = require('./src/api/registry');
 const routes = require('./src/api/routes');
 
 async function main() {
   await fs.mkdir(config.mediaDir, { recursive: true });
-  await fs.mkdir(config.hlsDir, { recursive: true });
   await fs.mkdir(config.channelDir, { recursive: true });
 
-  await library.load();
+  // Default channel: watches root of mediaDir at depth 0 so subdirs (named channels) are ignored.
+  const defaultChannel = new Channel({
+    slug: null,
+    name: config.name,
+    mediaDir: config.mediaDir,
+    dataDir: config.dataDir,
+    hlsDir: config.hlsDir,
+  });
+  channels.add(null, defaultChannel);
+  await defaultChannel.start();
 
-  const entries = library.getReadyEntries();
-  if (entries.length > 0) {
-    await playlist.build(entries);
-    engine.start();
-  } else {
-    console.log('[server] No media yet — drop video files into data/media/ to begin streaming.');
+  // Named channels: each subdirectory of mediaDir becomes an independent channel.
+  const entries = await fs.readdir(config.mediaDir, { withFileTypes: true });
+  for (const entry of entries.filter(e => e.isDirectory())) {
+    const slug = entry.name;
+    const ch = new Channel({
+      slug,
+      name: null,
+      mediaDir: path.join(config.mediaDir, slug),
+      dataDir: path.join(config.dataDir, 'channels', slug),
+      hlsDir: path.join(config.hlsDir, slug),
+    });
+    channels.add(slug, ch);
+    await ch.start();
   }
 
   const app = express();
   app.use(express.json());
 
-  // Allow cross-origin requests so friends' browsers can fetch our stream
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     next();
   });
 
-  // Serve HLS segments with correct MIME types and no caching on the manifest
+  // Single static mount covers both default (/stream/index.m3u8) and named (/stream/<slug>/index.m3u8)
   app.use('/stream', express.static(config.hlsDir, {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('.m3u8')) {
@@ -50,13 +63,16 @@ async function main() {
   app.use(routes);
 
   app.listen(config.port, '0.0.0.0', () => {
-    console.log(`\n[server] FriendChannel "${config.name}" is live`);
-    console.log(`[server]   Local:     http://localhost:${config.port}`);
-    console.log(`[server]   Network:   http://${config.tailscaleIP}:${config.port}`);
-    console.log(`[server]   Stream:    http://${config.tailscaleIP}:${config.port}/stream/index.m3u8\n`);
+    const all = channels.getAll();
+    console.log(`\n[server] FriendChannel "${config.name}" is live — ${all.length} channel(s)`);
+    console.log(`[server]   Local:   http://localhost:${config.port}`);
+    console.log(`[server]   Network: http://${config.tailscaleIP}:${config.port}`);
+    for (const ch of all) {
+      const streamPath = ch.slug ? `/stream/${ch.slug}/index.m3u8` : '/stream/index.m3u8';
+      console.log(`[server]   ${(ch.slug || 'default').padEnd(12)} http://${config.tailscaleIP}:${config.port}${streamPath}`);
+    }
+    console.log();
   });
-
-  watcher.start();
 
   if (config.registryURL) {
     registry.start();
@@ -67,7 +83,7 @@ async function main() {
 
   const shutdown = async (signal) => {
     console.log(`\n[server] Received ${signal}, shutting down...`);
-    engine.stop();
+    channels.getAll().forEach(ch => ch.stop());
     registry.stop();
     await registry.unregister();
     process.exit(0);

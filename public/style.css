@@ -289,8 +289,8 @@ main {
   gap: 0.6rem;
 }
 
-.download-row input {
-  flex: 1;
+.download-row input,
+.download-row select {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -302,7 +302,16 @@ main {
   font-family: inherit;
 }
 
-.download-row input:focus {
+.download-row input {
+  flex: 1;
+}
+
+.download-row select {
+  cursor: pointer;
+}
+
+.download-row input:focus,
+.download-row select:focus {
   border-color: var(--border-hover);
 }
 

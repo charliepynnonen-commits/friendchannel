@@ -1,33 +1,45 @@
 const chokidar = require('chokidar');
-const library = require('./library');
-const playlist = require('../stream/playlist');
-const engine = require('../stream/engine');
-const config = require('../config');
 
-function start() {
-  const watcher = chokidar.watch(config.mediaDir, {
+function createWatcher(mediaDir, library, onUpdate, opts = {}) {
+  const watcher = chokidar.watch(mediaDir, {
     persistent: true,
     ignoreInitial: false,
-    ignored: /(^|[/\\])\../, // ignore dot files (.DS_Store, .fc_tmp_*, etc.)
+    ignored: /(^|[/\\])\../,
     awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 500 },
+    depth: opts.depth,
   });
 
-  // Track in-flight normalizations. The update only runs when ALL pending
-  // normalizes are done — otherwise a fast file triggers a rebuild before
-  // slower files finish.
+  // Serialize normalizations — one at a time so each encode gets full CPU.
+  // activeNormals counts queued+running work; onUpdate only fires when all done.
   let activeNormals = 0;
   let pendingUpdate = false;
+  const normalizeQueue = [];
+  let queueRunning = false;
 
   function maybeUpdate() {
     if (activeNormals > 0) return;
     if (!pendingUpdate) return;
     pendingUpdate = false;
-    _updateStream();
+    onUpdate();
+  }
+
+  async function drainQueue() {
+    if (queueRunning) return;
+    queueRunning = true;
+    while (normalizeQueue.length > 0) {
+      const { filePath, resolve } = normalizeQueue.shift();
+      const added = await library.add(filePath);
+      resolve(added);
+    }
+    queueRunning = false;
   }
 
   watcher.on('add', async (filePath) => {
     activeNormals++;
-    const added = await library.add(filePath);
+    const added = await new Promise(resolve => {
+      normalizeQueue.push({ filePath, resolve });
+      drainQueue();
+    });
     activeNormals--;
     if (added) pendingUpdate = true;
     maybeUpdate();
@@ -41,21 +53,8 @@ function start() {
     }
   });
 
-  console.log(`[watcher] Watching ${config.mediaDir}`);
+  console.log(`[watcher] Watching ${mediaDir}`);
+  return watcher;
 }
 
-async function _updateStream() {
-  const entries = library.getReadyEntries();
-  if (entries.length === 0) {
-    engine.stop();
-    return;
-  }
-  await playlist.build(entries);
-  if (!engine.isRunning()) {
-    engine.start();
-  } else {
-    engine.restart();
-  }
-}
-
-module.exports = { start };
+module.exports = createWatcher;

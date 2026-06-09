@@ -26,15 +26,22 @@ async function _post(path, body) {
   });
 }
 
-async function register(streaming) {
+async function register() {
   if (!config.registryURL) return;
+  const channels = require('../channels');
+  const all = channels.getAll();
   const body = {
     id: nodeId,
     name: config.name,
     tailscaleIP: config.tailscaleIP,
     port: config.port,
-    streaming: !!streaming,
+    streaming: all.some(ch => ch.isRunning()),
     iconURL: findIconURL(),
+    channels: all.map(ch => ({
+      slug: ch.slug,
+      name: ch.slug ? ch.name : config.name,
+      streaming: ch.isRunning(),
+    })),
   };
   // Two attempts — first may time out waking the Fly.io machine from sleep
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -71,10 +78,8 @@ async function getChannels() {
 }
 
 function start() {
-  const engine = require('../stream/engine');
-  const beat = () => register(engine.isRunning());
-  beat();
-  intervalId = setInterval(beat, 60_000);
+  register();
+  intervalId = setInterval(register, 60_000);
 }
 
 function stop() {

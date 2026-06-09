@@ -22,10 +22,22 @@ async function loadChannels() {
     const res = await fetch('/api/channels');
     const channels = await res.json();
     renderChannels(channels);
+    populateChannelSelect(channels.filter(ch => ch.isSelf));
   } catch {
     document.getElementById('channels-grid').innerHTML =
       '<div class="empty-state">Could not load channels.</div>';
   }
+}
+
+function populateChannelSelect(selfChannels) {
+  const sel = document.getElementById('yt-channel');
+  sel.innerHTML = selfChannels.map(ch => {
+    const val = ch.slug || '';
+    const label = ch.slug ? ch.name : 'Default';
+    return `<option value="${escapeAttr(val)}">${escapeHtml(label)}</option>`;
+  }).join('');
+  // Only show the dropdown when there are multiple local channels to choose from
+  sel.classList.toggle('hidden', selfChannels.length <= 1);
 }
 
 function renderChannels(channels) {
@@ -36,19 +48,25 @@ function renderChannels(channels) {
     return;
   }
 
-  grid.innerHTML = channels.map(ch => `
+  grid.innerHTML = channels.map(ch => {
+    const url = `http://${ch.tailscaleIP}:${ch.port}${ch.streamPath}`;
+    const selfBadge = (ch.isSelf && !ch.slug)
+      ? '<div class="channel-self-badge">Your Channel</div>'
+      : (ch.isSelf ? '<div class="channel-self-badge">Local</div>' : '');
+    return `
     <div class="channel-card ${ch.streaming ? '' : 'offline'} ${ch.isSelf ? 'self' : ''}"
          data-id="${ch.id}"
          data-name="${escapeAttr(ch.name)}"
-         data-url="http://${ch.tailscaleIP}:${ch.port}/stream/index.m3u8"
+         data-url="${escapeAttr(url)}"
          data-icon-url="${escapeAttr(ch.iconURL || '')}">
-      ${ch.isSelf ? '<div class="channel-self-badge">Your Channel</div>' : ''}
+      ${selfBadge}
       <div class="channel-name">${escapeHtml(ch.name)}</div>
       <div class="channel-status ${ch.streaming ? 'live' : ''}">
         ${ch.streaming ? 'Live' : 'Offline'}
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   grid.querySelectorAll('.channel-card:not(.offline)').forEach(card => {
     card.addEventListener('click', () => {
@@ -154,6 +172,9 @@ async function startDownload() {
   const url = ytInput.value.trim();
   if (!url) return;
 
+  const sel = document.getElementById('yt-channel');
+  const slug = sel.value || null;
+
   ytBtn.disabled = true;
   ytBtn.textContent = 'Downloading...';
   setStatus('Starting...', '');
@@ -162,7 +183,7 @@ async function startDownload() {
     const res = await fetch('/api/download', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, slug }),
     });
 
     if (!res.ok) {

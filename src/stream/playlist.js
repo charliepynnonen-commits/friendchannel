@@ -1,7 +1,6 @@
 const fs = require('fs/promises');
-const config = require('../config');
 
-async function build(entries) {
+async function build(entries, playlistPath) {
   const lines = ['ffconcat version 1.0'];
   for (const { path: p, duration } of entries) {
     lines.push(`file '${p.replace(/\\/g, '\\\\').replace(/'/g, "'\\''")}'`);
@@ -10,7 +9,7 @@ async function build(entries) {
     // which is what caused the 45-second stall at file transitions.
     if (duration) lines.push(`duration ${duration.toFixed(6)}`);
   }
-  await fs.writeFile(config.playlistPath, lines.join('\n') + '\n');
+  await fs.writeFile(playlistPath, lines.join('\n') + '\n');
 }
 
 module.exports = { build };

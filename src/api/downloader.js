@@ -17,16 +17,17 @@ function isInstalled() {
   }
 }
 
-function download(url, onLine) {
+function download(url, targetDir, onLine) {
   fs.mkdirSync(ytTmpDir, { recursive: true });
+  fs.mkdirSync(targetDir, { recursive: true });
 
   return new Promise((resolve, reject) => {
     const proc = spawn('yt-dlp', [
       // Prefer H264 720p + M4A — matches our normalize fast-path so video copy is used.
       '--format', 'bestvideo[vcodec^=avc1][height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio[ext=m4a]/best[height<=720]/best',
       '--merge-output-format', 'mp4',
-      // Final file lands in media dir; all intermediates (f136, f140, .part) stay in tmp
-      '--paths', `home:${config.mediaDir}`,
+      // Final file lands in target dir; all intermediates (f136, f140, .part) stay in tmp
+      '--paths', `home:${targetDir}`,
       '--paths', `temp:${ytTmpDir}`,
       '--output', '%(title)s.%(ext)s',
       '--restrict-filenames',
