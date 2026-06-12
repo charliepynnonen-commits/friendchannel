@@ -80,16 +80,33 @@ function createLibrary(libraryPath) {
   }
 
   function getReadyEntries() {
+    const now = Date.now();
     return library.files
-      .filter(f => f.status === 'ready')
+      .filter(f => f.status === 'ready' && (!f.snoozedUntil || f.snoozedUntil <= now))
       .map(f => ({ path: f.path, duration: f.duration }));
+  }
+
+  async function snooze(id, durationMs) {
+    const entry = library.files.find(f => f.id === id);
+    if (!entry) return false;
+    entry.snoozedUntil = Date.now() + durationMs;
+    await _save();
+    return true;
+  }
+
+  async function unsnooze(id) {
+    const entry = library.files.find(f => f.id === id);
+    if (!entry) return false;
+    delete entry.snoozedUntil;
+    await _save();
+    return true;
   }
 
   function list() {
     return library.files;
   }
 
-  return { load, add, remove, getReadyEntries, list };
+  return { load, add, remove, getReadyEntries, list, snooze, unsnooze };
 }
 
 module.exports = createLibrary;

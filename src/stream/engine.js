@@ -2,7 +2,18 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-function createEngine(slug, playlistPath, hlsDir) {
+const ICON_FILES = ['icon.gif', 'icon.png', 'icon.webp'];
+
+function findIcon(iconDir) {
+  if (!iconDir) return null;
+  for (const file of ICON_FILES) {
+    const p = path.join(iconDir, file);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+function createEngine(slug, playlistPath, hlsDir, iconDir) {
   let proc = null;
   let restartTimer = null;
   let running = false;
@@ -13,11 +24,39 @@ function createEngine(slug, playlistPath, hlsDir) {
   const tag = `[stream:${slug}]`;
 
   function buildArgs() {
-    return [
+    const iconPath = findIcon(iconDir);
+
+    const args = [
       '-re',
       '-f', 'concat', '-safe', '0', '-stream_loop', '-1',
       '-i', playlistPath,
-      '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black',
+    ];
+
+    if (iconPath) {
+      // GIF: ignore embedded loop count so it animates forever.
+      // PNG/WEBP: -loop 1 holds the single frame as an infinite stream.
+      if (iconPath.endsWith('.gif')) {
+        args.push('-ignore_loop', '0');
+      } else {
+        args.push('-loop', '1');
+      }
+      args.push('-i', iconPath);
+    }
+
+    if (iconPath) {
+      args.push(
+        '-filter_complex',
+        '[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black[bg];[bg][1:v]overlay=W-w-20:H-h-20:eof_action=repeat[v]',
+        '-map', '[v]',
+        '-map', '0:a',
+      );
+    } else {
+      args.push(
+        '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black',
+      );
+    }
+
+    args.push(
       '-r', '25',
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
       '-g', '50', '-sc_threshold', '0',
@@ -30,7 +69,9 @@ function createEngine(slug, playlistPath, hlsDir) {
       '-hls_delete_threshold', '5',
       '-hls_segment_filename', path.join(hlsDir, 'seg_%05d.ts'),
       path.join(hlsDir, 'index.m3u8'),
-    ];
+    );
+
+    return args;
   }
 
   function killOrphans() {

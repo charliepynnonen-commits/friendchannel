@@ -14,7 +14,14 @@
       <span class="logo">&#9641;</span>
       <h1>FriendChannel</h1>
     </div>
-    <div id="self-info" class="self-info"></div>
+    <div class="header-right">
+      <div id="tv-now" class="tv-now hidden">
+        <span class="tv-icon">▶</span>
+        <span id="tv-now-name"></span>
+        <button id="tv-stop-btn">■</button>
+      </div>
+      <div id="self-info" class="self-info"></div>
+    </div>
   </header>
 
   <div id="player-wrap" class="hidden">
@@ -38,6 +45,16 @@
     </div>
     <div id="yt-status" class="download-status hidden"></div>
   </main>
+
+  <div id="library-modal" class="library-modal hidden">
+    <div class="library-panel">
+      <div class="library-header">
+        <span id="library-title">Library</span>
+        <button id="library-close" title="Close">&#10005;</button>
+      </div>
+      <div id="library-list" class="library-list"></div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

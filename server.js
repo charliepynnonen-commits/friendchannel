@@ -6,6 +6,7 @@ const config = require('./src/config');
 const Channel = require('./src/channel');
 const channels = require('./src/channels');
 const registry = require('./src/api/registry');
+const display = require('./src/api/display');
 const routes = require('./src/api/routes');
 
 async function main() {
@@ -19,6 +20,7 @@ async function main() {
     mediaDir: config.mediaDir,
     dataDir: config.dataDir,
     hlsDir: config.hlsDir,
+    iconDir: config.channelDir,
   });
   channels.add(null, defaultChannel);
   await defaultChannel.start();
@@ -33,6 +35,7 @@ async function main() {
       mediaDir: path.join(config.mediaDir, slug),
       dataDir: path.join(config.dataDir, 'channels', slug),
       hlsDir: path.join(config.hlsDir, slug),
+      iconDir: path.join(config.dataDir, 'channels', slug),
     });
     channels.add(slug, ch);
     await ch.start();
@@ -83,6 +86,7 @@ async function main() {
 
   const shutdown = async (signal) => {
     console.log(`\n[server] Received ${signal}, shutting down...`);
+    display.stop();
     channels.getAll().forEach(ch => ch.stop());
     registry.stop();
     await registry.unregister();

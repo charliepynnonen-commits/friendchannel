@@ -3,7 +3,9 @@ let hls = null;
 async function init() {
   await loadStatus();
   await loadChannels();
+  await pollDisplay();
   setInterval(loadChannels, 30_000);
+  setInterval(pollDisplay, 5_000);
 }
 
 async function loadStatus() {
@@ -40,6 +42,8 @@ function populateChannelSelect(selfChannels) {
   sel.classList.toggle('hidden', selfChannels.length <= 1);
 }
 
+let _tvUrl = null;
+
 function renderChannels(channels) {
   const grid = document.getElementById('channels-grid');
 
@@ -53,6 +57,12 @@ function renderChannels(channels) {
     const selfBadge = (ch.isSelf && !ch.slug)
       ? '<div class="channel-self-badge">Your Channel</div>'
       : (ch.isSelf ? '<div class="channel-self-badge">Local</div>' : '');
+    const tvBtn = ch.streaming
+      ? `<button class="tv-btn${_tvUrl === url ? ' active' : ''}" data-url="${escapeAttr(url)}" data-name="${escapeAttr(ch.name)}">▶ TV</button>`
+      : '';
+    const libBtn = ch.isSelf
+      ? `<button class="lib-btn" data-slug="${escapeAttr(ch.slug || 'default')}" data-name="${escapeAttr(ch.name)}" title="Manage library">≡</button>`
+      : '';
     return `
     <div class="channel-card ${ch.streaming ? '' : 'offline'} ${ch.isSelf ? 'self' : ''}"
          data-id="${ch.id}"
@@ -61,8 +71,14 @@ function renderChannels(channels) {
          data-icon-url="${escapeAttr(ch.iconURL || '')}">
       ${selfBadge}
       <div class="channel-name">${escapeHtml(ch.name)}</div>
-      <div class="channel-status ${ch.streaming ? 'live' : ''}">
-        ${ch.streaming ? 'Live' : 'Offline'}
+      <div class="channel-footer">
+        <div class="channel-status ${ch.streaming ? 'live' : ''}">
+          ${ch.streaming ? 'Live' : 'Offline'}
+        </div>
+        <div class="channel-footer-btns">
+          ${tvBtn}
+          ${libBtn}
+        </div>
       </div>
     </div>
   `;
@@ -73,7 +89,65 @@ function renderChannels(channels) {
       openPlayer(card.dataset.url, card.dataset.name, card.dataset.iconUrl || null);
     });
   });
+
+  grid.querySelectorAll('.tv-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      playOnTV(btn.dataset.url, btn.dataset.name);
+    });
+  });
+
+  grid.querySelectorAll('.lib-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openLibrary(btn.dataset.slug, btn.dataset.name);
+    });
+  });
 }
+
+async function pollDisplay() {
+  try {
+    const res = await fetch('/api/display');
+    const s = await res.json();
+    updateTVBar(s);
+  } catch {}
+}
+
+function updateTVBar(s) {
+  _tvUrl = s.running ? s.url : null;
+  const bar = document.getElementById('tv-now');
+  const nameEl = document.getElementById('tv-now-name');
+  if (s.running && s.name) {
+    nameEl.textContent = s.name;
+    bar.classList.remove('hidden');
+  } else {
+    bar.classList.add('hidden');
+  }
+  // Highlight the active TV button
+  document.querySelectorAll('.tv-btn').forEach(btn => {
+    btn.classList.toggle('active', s.running && btn.dataset.url === s.url);
+  });
+}
+
+async function playOnTV(url, name) {
+  try {
+    await fetch('/api/display/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, name }),
+    });
+    updateTVBar({ running: true, url, name });
+  } catch {}
+}
+
+async function stopTV() {
+  try {
+    await fetch('/api/display/stop', { method: 'POST' });
+    updateTVBar({ running: false });
+  } catch {}
+}
+
+document.getElementById('tv-stop-btn').addEventListener('click', stopTV);
 
 function openPlayer(url, name, iconURL) {
   document.getElementById('player-channel-name').textContent = name;
@@ -141,6 +215,122 @@ function closePlayer() {
 }
 
 document.getElementById('player-close').addEventListener('click', closePlayer);
+
+// ── Library panel ────────────────────────────────
+
+let _librarySlug = null;
+
+document.getElementById('library-close').addEventListener('click', closeLibrary);
+document.getElementById('library-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeLibrary();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !document.getElementById('library-modal').classList.contains('hidden')) {
+    closeLibrary();
+  }
+});
+
+function closeLibrary() {
+  document.getElementById('library-modal').classList.add('hidden');
+  _librarySlug = null;
+}
+
+async function openLibrary(slug, name) {
+  _librarySlug = slug;
+  document.getElementById('library-title').textContent = `${name} — Library`;
+  document.getElementById('library-list').innerHTML = '<div class="lib-loading">Loading…</div>';
+  document.getElementById('library-modal').classList.remove('hidden');
+  await refreshLibrary();
+}
+
+async function refreshLibrary() {
+  if (!_librarySlug) return;
+  try {
+    const res = await fetch(`/api/channel/${_librarySlug}/library`);
+    const entries = await res.json();
+    renderLibrary(entries);
+  } catch {
+    document.getElementById('library-list').innerHTML = '<div class="lib-loading">Failed to load.</div>';
+  }
+}
+
+function renderLibrary(entries) {
+  const list = document.getElementById('library-list');
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="lib-loading">No videos yet.</div>';
+    return;
+  }
+  const now = Date.now();
+  list.innerHTML = entries.map(e => {
+    const dur = e.duration ? fmtDur(e.duration) : '?';
+    const snoozed = e.snoozedUntil && e.snoozedUntil > now;
+    const snoozeLabel = snoozed ? `Snoozed until ${fmtDate(e.snoozedUntil)}` : '';
+    return `
+      <div class="lib-entry ${snoozed ? 'snoozed' : ''}" data-id="${escapeAttr(e.id)}">
+        <div class="lib-entry-info">
+          <span class="lib-entry-name" title="${escapeAttr(e.filename)}">${escapeHtml(e.filename)}</span>
+          <span class="lib-entry-dur">${dur}</span>
+        </div>
+        <div class="lib-entry-actions">
+          ${snoozed
+            ? `<span class="lib-snooze-label">${escapeHtml(snoozeLabel)}</span>
+               <button class="lib-wake-btn" data-id="${escapeAttr(e.id)}">Wake</button>`
+            : `<div class="lib-snooze-menu">
+                 <button class="lib-snooze-btn">Snooze</button>
+                 <div class="lib-snooze-opts hidden">
+                   <button data-hours="24">24 h</button>
+                   <button data-hours="72">3 d</button>
+                   <button data-hours="168">7 d</button>
+                   <button data-hours="720">30 d</button>
+                 </div>
+               </div>`
+          }
+        </div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.lib-snooze-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const opts = btn.nextElementSibling;
+      opts.classList.toggle('hidden');
+    });
+  });
+
+  list.querySelectorAll('.lib-snooze-opts button').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.closest('.lib-entry').dataset.id;
+      const hours = Number(btn.dataset.hours);
+      await fetch(`/api/channel/${_librarySlug}/snooze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, hours }),
+      });
+      await refreshLibrary();
+    });
+  });
+
+  list.querySelectorAll('.lib-wake-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await fetch(`/api/channel/${_librarySlug}/unsnooze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: btn.dataset.id }),
+      });
+      await refreshLibrary();
+    });
+  });
+}
+
+function fmtDur(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = Math.floor(secs % 60);
+  return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function fmtDate(ms) {
+  return new Date(ms).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closePlayer();

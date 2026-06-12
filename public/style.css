@@ -110,10 +110,53 @@ h1 {
   letter-spacing: -0.3px;
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+}
+
 .self-info {
   font-size: 0.78rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+.tv-now {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--live);
+}
+
+.tv-now.hidden { display: none; }
+
+.tv-icon {
+  font-size: 0.65rem;
+}
+
+#tv-now-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#tv-stop-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+#tv-stop-btn:hover {
+  border-color: var(--red);
+  color: var(--red);
 }
 
 /* ── Main layout ─────────────────────────────── */
@@ -183,9 +226,221 @@ main {
   font-weight: 600;
 }
 
+.channel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.channel-footer-btns {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .channel-status {
   font-size: 0.78rem;
   color: var(--text-muted);
+}
+
+.tv-btn, .lib-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.tv-btn:hover, .lib-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.tv-btn.active {
+  border-color: var(--live);
+  color: var(--live);
+}
+
+/* ── Library modal ───────────────────────────────── */
+
+.library-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.library-modal.hidden {
+  display: none;
+}
+
+.library-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 620px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.library-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
+#library-close {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#library-close:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.library-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0.5rem 0;
+}
+
+.lib-loading {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 1.5rem 1.25rem;
+}
+
+.lib-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.83rem;
+}
+
+.lib-entry:last-child { border-bottom: none; }
+
+.lib-entry.snoozed { opacity: 0.55; }
+
+.lib-entry-info {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.lib-entry-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lib-entry-dur {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.lib-entry-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.lib-snooze-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.lib-snooze-menu {
+  position: relative;
+}
+
+.lib-snooze-btn, .lib-wake-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.lib-snooze-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.lib-wake-btn:hover {
+  border-color: var(--live);
+  color: var(--live);
+}
+
+.lib-snooze-opts {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  z-index: 10;
+  min-width: 80px;
+}
+
+.lib-snooze-opts.hidden { display: none; }
+
+.lib-snooze-opts button {
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.lib-snooze-opts button:hover {
+  background: var(--border);
 }
 
 .channel-status.live {

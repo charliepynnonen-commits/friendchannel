@@ -4,14 +4,17 @@ const path = require('path');
 const channels = require('../channels');
 const registry = require('./registry');
 const downloader = require('./downloader');
+const display = require('./display');
 const config = require('../config');
 
 const ICON_FILES = ['icon.gif', 'icon.png', 'icon.webp'];
 
-function findIconURL() {
+function findIconURL(iconDir, slug) {
+  if (!iconDir) return null;
   for (const file of ICON_FILES) {
-    if (fs.existsSync(path.join(config.channelDir, file))) {
-      return `http://${config.tailscaleIP}:${config.port}/channel/${file}`;
+    if (fs.existsSync(path.join(iconDir, file))) {
+      const urlPath = slug ? `/channel/${slug}/${file}` : `/channel/${file}`;
+      return `http://${config.tailscaleIP}:${config.port}${urlPath}`;
     }
   }
   return null;
@@ -21,7 +24,23 @@ function streamPath(slug) {
   return slug ? `/stream/${slug}/index.m3u8` : '/stream/index.m3u8';
 }
 
+// URL uses 'default' for the null-slug default channel
+function resolveSlug(param) {
+  return param === 'default' ? null : param;
+}
+
 const router = express.Router();
+
+// Serve named-channel icon files (e.g. data/channels/foo/icon.gif → /channel/foo/icon.gif).
+// Default-channel icons are handled by the /channel static mount in server.js.
+router.get('/channel/:slug/icon.:ext', (req, res, next) => {
+  if (!['gif', 'png', 'webp'].includes(req.params.ext)) return next();
+  const ch = channels.get(req.params.slug);
+  if (!ch || !ch.iconDir) return res.status(404).end();
+  const file = path.resolve(path.join(ch.iconDir, `icon.${req.params.ext}`));
+  if (!fs.existsSync(file)) return res.status(404).end();
+  res.sendFile(file);
+});
 
 router.get('/api/ping', (req, res) => {
   const streaming = channels.getAll().some(ch => ch.isRunning());
@@ -36,7 +55,7 @@ router.get('/api/status', (req, res) => {
     port: config.port,
     streaming: channels.getAll().some(ch => ch.isRunning()),
     mediaCount: defaultCh ? defaultCh.list().length : 0,
-    iconURL: findIconURL(),
+    iconURL: defaultCh ? findIconURL(defaultCh.iconDir, null) : null,
   });
 });
 
@@ -47,7 +66,6 @@ router.get('/api/library', (req, res) => {
 
 router.get('/api/channels', async (req, res) => {
   const remote = await registry.getChannels();
-  const iconURL = findIconURL();
 
   const selfChannels = channels.getAll().map(ch => ({
     id: `${registry.nodeId}-${ch.slug || 'default'}`,
@@ -58,7 +76,7 @@ router.get('/api/channels', async (req, res) => {
     tailscaleIP: config.tailscaleIP,
     port: config.port,
     streaming: ch.isRunning(),
-    iconURL,
+    iconURL: findIconURL(ch.iconDir, ch.slug),
     isSelf: true,
   }));
 
@@ -100,7 +118,6 @@ router.get('/api/channels', async (req, res) => {
 
 router.get('/playlist.m3u', async (req, res) => {
   const remote = await registry.getChannels();
-  const iconURL = findIconURL();
 
   const selfChannels = channels.getAll()
     .filter(ch => ch.isRunning())
@@ -109,7 +126,7 @@ router.get('/playlist.m3u', async (req, res) => {
       slug: ch.slug,
       tailscaleIP: config.tailscaleIP,
       port: config.port,
-      iconURL,
+      iconURL: findIconURL(ch.iconDir, ch.slug),
     }));
 
   const remoteChannels = remote
@@ -141,6 +158,49 @@ router.get('/playlist.m3u', async (req, res) => {
   res.setHeader('Content-Type', 'application/x-mpegurl');
   res.setHeader('Content-Disposition', 'inline; filename="friendchannel.m3u"');
   res.send(lines.join('\n') + '\n');
+});
+
+router.get('/api/display', (req, res) => {
+  res.json(display.status());
+});
+
+router.post('/api/display/start', (req, res) => {
+  const { url, name } = req.body;
+  if (!url) return res.status(400).json({ error: 'url required' });
+  if (!display.isInstalled()) return res.status(503).json({ error: 'mpv not installed' });
+  display.start(url, name || url);
+  res.json({ ok: true });
+});
+
+router.post('/api/display/stop', (req, res) => {
+  display.stop();
+  res.json({ ok: true });
+});
+
+router.get('/api/channel/:slug/library', (req, res) => {
+  const ch = channels.get(resolveSlug(req.params.slug));
+  if (!ch) return res.status(404).json({ error: 'channel not found' });
+  res.json(ch.list());
+});
+
+router.post('/api/channel/:slug/snooze', async (req, res) => {
+  const ch = channels.get(resolveSlug(req.params.slug));
+  if (!ch) return res.status(404).json({ error: 'channel not found' });
+  const { id, hours = 24 } = req.body;
+  if (!id) return res.status(400).json({ error: 'id required' });
+  const ok = await ch.snooze(id, hours);
+  if (!ok) return res.status(404).json({ error: 'entry not found' });
+  res.json({ ok: true });
+});
+
+router.post('/api/channel/:slug/unsnooze', async (req, res) => {
+  const ch = channels.get(resolveSlug(req.params.slug));
+  if (!ch) return res.status(404).json({ error: 'channel not found' });
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: 'id required' });
+  const ok = await ch.unsnooze(id);
+  if (!ok) return res.status(404).json({ error: 'entry not found' });
+  res.json({ ok: true });
 });
 
 router.post('/api/download', (req, res) => {
