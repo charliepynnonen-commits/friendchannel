@@ -18,6 +18,8 @@ module.exports = {
   port: parseInt(process.env.PORT || '7777', 10),
   tailscaleIP: process.env.TAILSCALE_IP || detectTailscaleIP() || 'localhost',
   registryURL: process.env.REGISTRY_URL || null,
+  // Percentage of the 1280px output width the channel bug icon occupies (0–100).
+  iconSize: parseFloat(process.env.ICON_SIZE || '10'),
   dataDir: DATA_DIR,
   mediaDir: path.join(DATA_DIR, 'media'),
   hlsDir: path.join(DATA_DIR, 'hls'),

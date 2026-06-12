@@ -39,26 +39,28 @@ function start(url, name) {
   const ao = process.env.MPV_AO;
   if (ao) args.unshift(`--ao=${ao}`);
 
-  proc = spawn('mpv', args, {
+  const thisProc = spawn('mpv', args, {
     stdio: ['ignore', 'ignore', 'pipe'],
     detached: false,
   });
+  proc = thisProc;
   currentUrl = url;
   currentName = name;
 
-  proc.stderr.on('data', d => {
+  thisProc.stderr.on('data', d => {
     const msg = d.toString().trim();
     if (msg) console.log('[display]', msg);
   });
 
-  proc.on('exit', (code) => {
+  thisProc.on('exit', (code) => {
+    if (proc !== thisProc) return; // a newer spawn replaced this one
     console.log(`[display] mpv exited (code=${code})`);
     proc = null;
     currentUrl = null;
     currentName = null;
   });
 
-  console.log(`[display] mpv started (PID: ${proc.pid}) — ${url}`);
+  console.log(`[display] mpv started (PID: ${thisProc.pid}) — ${url}`);
 }
 
 function _kill() {

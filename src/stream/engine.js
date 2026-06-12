@@ -1,6 +1,7 @@
 const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const config = require('../config');
 
 const ICON_FILES = ['icon.gif', 'icon.png', 'icon.webp'];
 
@@ -46,7 +47,7 @@ function createEngine(slug, playlistPath, hlsDir, iconDir) {
     if (iconPath) {
       args.push(
         '-filter_complex',
-        '[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black[bg];[1:v]scale=128:-2[icon];[bg][icon]overlay=W-w-20:H-h-20:eof_action=repeat[v]',
+        `[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black[bg];[1:v]scale=${Math.round(1280 * config.iconSize / 100)}:-2[icon];[bg][icon]overlay=W-w-20:H-h-20:eof_action=repeat[v]`,
         '-map', '[v]',
         '-map', '0:a',
       );
