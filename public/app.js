@@ -131,13 +131,33 @@ function updateTVBar(s) {
 
 async function playOnTV(url, name) {
   try {
-    await fetch('/api/display/start', {
+    const res = await fetch('/api/display/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, name }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('[TV]', err.error || res.status);
+      setTVError(err.error || `Error ${res.status}`);
+      return;
+    }
     updateTVBar({ running: true, url, name });
-  } catch {}
+  } catch (e) {
+    setTVError(e.message);
+  }
+}
+
+function setTVError(msg) {
+  const bar = document.getElementById('tv-now');
+  const nameEl = document.getElementById('tv-now-name');
+  nameEl.textContent = msg;
+  bar.classList.remove('hidden');
+  bar.style.color = 'var(--red)';
+  setTimeout(() => {
+    bar.style.color = '';
+    if (!_tvUrl) bar.classList.add('hidden');
+  }, 4000);
 }
 
 async function stopTV() {
